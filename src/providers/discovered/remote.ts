@@ -46,18 +46,19 @@ function compact(result: object) {
     (block): block is { type: 'text'; text: string } =>
       Boolean(block) && (block as { type?: unknown }).type === 'text',
   );
-  if (texts.length !== 1) return result;
-  try {
-    if (!isDeepStrictEqual(JSON.parse(texts[0].text), structuredContent)) return result;
-  } catch {
-    return result;
-  }
-  return {
-    ...rest,
-    content: rest.content.map((block) =>
-      block === texts[0] ? { type: 'text', text: JSON.stringify(structuredContent) } : block,
-    ),
+  const same = (block: { text: string }) => {
+    try {
+      return isDeepStrictEqual(JSON.parse(block.text), structuredContent);
+    } catch {
+      return false;
+    }
   };
+  const data = { type: 'text', text: JSON.stringify(structuredContent) };
+  if (texts.length === 1 && same(texts[0]))
+    return { ...rest, content: rest.content.map((block) => (block === texts[0] ? data : block)) };
+  if (texts.some(same)) return result;
+  // The model only reads content, so data that is only in structuredContent is added as text.
+  return { ...rest, content: [...rest.content, data] };
 }
 
 const responseBytes = Math.ceil(fileBytes / 3) * 4 + 1024 * 1024;
