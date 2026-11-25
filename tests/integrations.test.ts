@@ -1439,6 +1439,7 @@ test('remote MCP results keep structuredContent the text only summarizes', async
   const { StreamableHTTPServerTransport } =
     await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
   const job = { status: 'succeeded', files: [{ id: 'asset-1', url: 'https://example.test/a' }] };
+  const image = Buffer.from('synthetic-png').toString('base64');
   const server = createServer(async (request, response) => {
     const mcp = new McpServer({ name: 'synthetic-files', version: '1' });
     mcp.registerTool('summary', { description: 'Summary' }, async () => ({
@@ -1448,6 +1449,19 @@ test('remote MCP results keep structuredContent the text only summarizes', async
     mcp.registerTool('same', { description: 'Same' }, async () => ({
       content: [{ type: 'text', text: JSON.stringify(job, null, 2) }],
       structuredContent: job,
+    }));
+    mcp.registerTool('image', { description: 'Image' }, async () => ({
+      content: [
+        { type: 'image', data: image, mimeType: 'image/png' },
+        { type: 'text', text: 'ok' },
+      ],
+      structuredContent: { url: 'https://example.test/a.png' },
+    }));
+    mcp.registerTool('plain', { description: 'Plain' }, async () => ({
+      content: [
+        { type: 'text', text: 'first' },
+        { type: 'text', text: 'second' },
+      ],
     }));
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     response.on('close', () => void transport.close());
@@ -1469,6 +1483,19 @@ test('remote MCP results keep structuredContent the text only summarizes', async
   });
   assert.deepEqual(await transport.callTool(`${origin}/mcp`, {}, 'same', {}), {
     content: [{ type: 'text', text: JSON.stringify(job) }],
+  });
+  assert.deepEqual(await transport.callTool(`${origin}/mcp`, {}, 'image', {}), {
+    content: [
+      { name: 'image-1.png', mimeType: 'image/png', bytes: Buffer.from('synthetic-png') },
+      { type: 'text', text: 'ok' },
+      { type: 'text', text: JSON.stringify({ url: 'https://example.test/a.png' }) },
+    ],
+  });
+  assert.deepEqual(await transport.callTool(`${origin}/mcp`, {}, 'plain', {}), {
+    content: [
+      { type: 'text', text: 'first' },
+      { type: 'text', text: 'second' },
+    ],
   });
 });
 
