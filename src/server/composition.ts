@@ -930,10 +930,12 @@ async function initializeApplication(
     ? ledger.curator(adapters.onboardingCurator)
     : curator;
   void adapters.models?.setSelectionCheck(() =>
-    onboardingCurator.curate(
-      { task: 'check', instructions: 'Return only {"ok":true}.', input: {}, automatic: false },
-      AbortSignal.timeout(30_000),
-    ),
+    onboardingCurator.curate({
+      task: 'check',
+      instructions: 'Return only {"ok":true}.',
+      input: {},
+      automatic: false,
+    }),
   );
   const decisions = adapters.decisions && ledger.decisions(adapters.decisions);
   const review: ModelReview = async (instructions, input, signal, question, responseSchema) => {

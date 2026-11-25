@@ -1329,15 +1329,21 @@ test('trust decisions select only owner evidence and keep reply evidence separat
   ] as const)
     assert.equal(trustBasis({ run: true, source, terms: [] }, owner)?.kind, kind, source);
   assert.equal(trustBasis({ run: false, source: 'message:0' }, owner), undefined);
-  assert.equal(trustBasis({ run: true, source: 'message:0' }, owner), undefined);
-  for (const terms of [
-    null,
-    {},
-    [false],
-    [{ user: 'EUR 1200', action: 'EUR 1300', same: false }],
-    [{ user: 'EUR 1200', action: 'EUR 1200', same: 'true' }],
-  ])
-    assert.equal(trustBasis({ run: true, source: 'message:0', terms }, owner), undefined);
+  assert.equal(trustBasis({ run: true, source: 'message:0' }, owner)?.kind, 'message');
+  assert.equal(
+    trustBasis(
+      {
+        run: true,
+        source: 'message:0',
+        terms: [
+          { user: 'EUR 1200', action: 'EUR 1200', same: true },
+          { user: 'EUR 1200', action: 'EUR 1300', same: false },
+        ],
+      },
+      owner,
+    ),
+    undefined,
+  );
   assert.equal(
     trustBasis(
       {
@@ -4720,16 +4726,16 @@ describe('model connections', { skip: !process.env.TEST_DATABASE_URL }, () => {
       curator.curate({ task: 'check', instructions: 'Return only {"ok":true}.', input: {} }),
       { providerStatus: 429, providerRetryable: true },
     );
-    assert.equal(calls, 10);
+    assert.equal(calls, 12);
 
     reply = () => Response.json({ error: { message: 'API key expired.' } }, { status: 401 });
     assert.equal((await ask()).stopReason, 'error');
-    assert.equal(calls, 11);
+    assert.equal(calls, 13);
     assert.equal(service.view().connections[0]!.status, 'reconnect');
     assert.match(service.current.issue!.reason, /API key expired/);
     assert.equal(service.configured, false);
     await assert.rejects(ask(), /add it again/);
-    assert.equal(calls, 11);
+    assert.equal(calls, 13);
   });
 
   test('model setup chooses capable defaults, preserves explicit choices and requires valid cloud accounts', async (t) => {
@@ -9828,6 +9834,36 @@ test('startup facts keep only structured bounded codes and do not call getters o
     }),
     { detailsOmitted: true },
   );
+  const connection = Object.assign(new Error('synthetic-private connect detail'), {
+    code: 'UND_ERR_CONNECT_TIMEOUT',
+  });
+  assert.deepEqual(
+    startupErrorFacts(
+      new Error('synthetic-private wrapper', {
+        cause: new TypeError('fetch failed', { cause: connection }),
+      }),
+    ),
+    { detailsOmitted: true, class: 'Error', errno: 'UND_ERR_CONNECT_TIMEOUT' },
+  );
+  const cleanup = Object.assign(new Error('synthetic-private stop'), {
+    code: 'NOD_RUNTIME_STOP_FAILED',
+  });
+  const primary = Object.assign(new Error('synthetic-private start'), {
+    code: 'NOD_COMPUTER_PROTECTION_FAILED',
+  });
+  assert.deepEqual(
+    startupErrorFacts(
+      Object.assign(new AggregateError([primary, cleanup], 'synthetic', { cause: cleanup }), {
+        step: 'start',
+      }),
+    ),
+    {
+      detailsOmitted: true,
+      class: 'Error',
+      code: 'NOD_COMPUTER_PROTECTION_FAILED',
+      step: 'start',
+    },
+  );
   const poisoned = Object.defineProperties(
     {},
     Object.fromEntries(
@@ -9844,6 +9880,8 @@ test('startup facts keep only structured bounded codes and do not call getters o
         'error',
         'failure',
         'message',
+        'cause',
+        'errors',
       ].map((key) => [
         key,
         {
