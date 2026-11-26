@@ -42,23 +42,21 @@ function compact(result: object) {
     structuredContent?: unknown;
   };
   if (structuredContent === undefined || !Array.isArray(rest.content)) return result;
-  const texts = rest.content.filter(
-    (block): block is { type: 'text'; text: string } =>
-      Boolean(block) && (block as { type?: unknown }).type === 'text',
-  );
-  const same = (block: { text: string }) => {
+  const repeats = (block: { type?: unknown; text?: unknown } | null) => {
+    if (block?.type !== 'text' || typeof block.text !== 'string') return false;
     try {
       return isDeepStrictEqual(JSON.parse(block.text), structuredContent);
     } catch {
       return false;
     }
   };
-  const data = { type: 'text', text: JSON.stringify(structuredContent) };
-  if (texts.length === 1 && same(texts[0]))
-    return { ...rest, content: rest.content.map((block) => (block === texts[0] ? data : block)) };
-  if (texts.some(same)) return result;
-  // The model only reads content, so data that is only in structuredContent is added as text.
-  return { ...rest, content: [...rest.content, data] };
+  return {
+    ...rest,
+    content: [
+      ...rest.content.filter((block) => !repeats(block)),
+      { type: 'text', text: JSON.stringify(structuredContent) },
+    ],
+  };
 }
 
 const responseBytes = Math.ceil(fileBytes / 3) * 4 + 1024 * 1024;
